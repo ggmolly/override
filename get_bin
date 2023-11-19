@@ -1,0 +1,42 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
+import subprocess
+import sys
+import os
+import pexpect
+
+PORT = 4243
+
+flag_dict = {}
+
+# Init flag dict
+for i in range(0, 10): # levelX
+    if i == 0:
+        flag_dict["level00"] = "level00"
+    else:
+        with open("level0{}/flag".format(i-1), "rt") as f:
+            flag_dict["level0{}".format(i)] = f.read().strip()
+
+if __name__ == "__main__":
+    if len(sys.argv) != 2:
+        print("Usage: {} <level>".format(sys.argv[0]))
+        exit(0)
+    flag = flag_dict[sys.argv[1]]
+    print("[#] spawning scp..")
+    proc = pexpect.spawn(
+        " ".join([
+            "scp",
+            "-P",
+            str(PORT),
+            sys.argv[1] + "@localhost:/home/users/{}/{}".format(sys.argv[1], sys.argv[1]),
+            "./{}_bin".format(sys.argv[1])
+        ])
+    )
+    proc.expect("password:")
+    print("[#] sending flag '{}'".format(flag))
+    proc.sendline(flag)
+    print("[#] waiting for EOF")
+    proc.expect(pexpect.EOF)
+    print("[+] done! downloaded to ./{}_bin".format(sys.argv[1]))
+    proc.close()
