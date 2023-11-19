@@ -1,0 +1,65 @@
+# level00
+
+## Testing the binary
+
+```sh
+$ ./level00
+***********************************
+*            -Level00 -           *
+***********************************
+Password: <CTRL+D>
+Invalid Password!
+$ ./level00
+***********************************
+*            -Level00 -           *
+***********************************
+Password:qweeeeeeeeeeeeeeeeeeeeeee
+
+Invalid Password!
+$ ./level00
+***********************************
+*            -Level00 -           *
+***********************************
+Password:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+
+Invalid Password!
+```
+
+## Disassembly
+
+```c
+int main(void)
+{
+    int n;
+
+    puts("***********************************");
+    puts("* \t     -Level00 -\t\t  *");
+    puts("***********************************");
+    printf("Password:");
+    scanf("%d", &n);
+    if (n != 5276) {
+        puts("\nInvalid Password!");
+    }
+    else {
+        puts("\nAuthenticated!");
+        system("/bin/sh");
+    }
+    return n != 5276;
+}
+```
+
+The binary is just a basic `scanf` with the format string `%d` so it tries to read an integer from the input. If the integer is not `5276` it prints `Invalid Password!` and exits. If the integer is `5276` it prints `Authenticated!` and executes `/bin/sh`.
+
+## Solution
+
+```sh
+$ ./level00
+***********************************
+*            -Level00 -           *
+***********************************
+Password:5276
+
+Authenticated!
+$ id
+uid=1000(level00) gid=1000(level00) euid=1001(level01) egid=100(users) groups=1001(level01),100(users),1000(level00)
+```
