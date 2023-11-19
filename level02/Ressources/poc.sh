@@ -1,6 +1,6 @@
 #!/bin/sh
 
-cat /tmp/payload.02 << EOF
+tee /tmp/payload.02 << EOF
 %22\$llx %23\$llx %24\$llx %25\$llx %26\$llx'
 a
 
