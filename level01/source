@@ -1,0 +1,40 @@
+#include <stdio.h>
+
+char a_user_name[100]; // buffer @ 0x0804a040 -> 0x0804a0a3 
+
+int main(void)
+{
+  int ret;
+  char buffer[16] = {0};
+
+  puts("********* ADMIN LOGIN PROMPT *********");
+  printf("Enter Username: ");
+  fgets(&a_user_name, 256, stdin);
+  if (verify_user_name() == 0) {
+    puts("Enter Password: ");
+    fgets(buffer, 100, stdin);
+    int passValid = verify_user_pass(buffer);
+    if ((passValid == 0) || (passValid != 0)) {
+      puts("nope, incorrect password...\n");
+      ret = 1;
+    }
+    else {
+      ret = 0;
+    }
+  }
+  else {
+    puts("nope, incorrect username...\n");
+    ret = 1;
+  }
+  return ret;
+}
+
+int verify_user_name() // inlined strncmp
+{
+  return strncmp(&a_user_name, "dat_wil", 7);
+}
+
+int verify_user_pass(char *buffer) // inlined strncmp
+{
+  return strncmp(buffer, "admin", 5);
+}

