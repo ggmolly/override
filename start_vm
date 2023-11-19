@@ -1,0 +1,30 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
+import subprocess
+import os
+import requests
+from tqdm import tqdm
+
+ISO_URL = "https://cdn.intra.42.fr/isos/OverRide.iso"
+ISO_NAME = os.path.basename(ISO_URL)
+ISO_PATH = "/tmp/" + ISO_NAME
+
+def download_iso():
+    if os.path.isfile(ISO_PATH):
+        print(f"[+] {ISO_NAME} already downloaded!")
+        return
+    req = requests.get(ISO_URL, stream=True)
+    size = int(req.headers.get("content-length", 0))
+    # iterate with tqdm
+    with open(ISO_PATH, "wb") as f:
+        for chunk in tqdm(req.iter_content(chunk_size=1024), desc=ISO_NAME, unit="KB", total=int(size / 1024)):
+            if chunk:
+                f.write(chunk)
+
+def start_vm():
+    os.execv("/usr/bin/qemu-system-x86_64", ["qemu-system-x86_64", "-m", "2G", "-netdev", "user,id=net0,hostfwd=tcp::4243-:4242", "-device", "e1000,netdev=net0", ISO_PATH])
+
+if __name__ == "__main__":
+    download_iso()
+    start_vm()
