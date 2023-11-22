@@ -1,0 +1,89 @@
+# level03
+
+## `checksec`'s output
+
+This time the `checksec` output is a bit different:
+
+```sh
+RELRO           STACK CANARY      NX            PIE             RPATH      RUNPATH      FILE
+Partial RELRO   Canary found      NX enabled    No PIE          No RPATH   No RUNPATH   /home/users/level03/level03
+```
+
+1. There's a partial RELRO, which means that the GOT is writable.
+2. There's a stack canary, which means that we can't overflow the stack to overwrite the return address.
+3. NX is enabled, which means that we can't execute shellcode on the stack.
+
+## Testing the binary
+
+```sh
+$ ./level03
+***********************************
+*               level03         **
+***********************************
+Password:
+Invalid Password
+$ ./level03
+***********************************
+*               level03         **
+***********************************
+Password:asdasdasd
+
+Invalid Password
+$ ./level03
+***********************************
+*               level03         **
+***********************************
+Password:A
+
+Invalid Password
+$ ./level03
+***********************************
+*               level03         **
+***********************************
+Password:
+
+
+
+
+asd
+
+Invalid Password
+```
+
+Nothing interesting here, let's disassemble the binary.
+
+## Disassembly
+
+[Full source code available here](source)
+
+The binary presents a simple XOR cipher, which is used to encrypt the password. The encrypted password is then compared to the user input.
+
+There's a huge switch case and it seems like XOR-ing ```Q}|u`sfg~sf{}|a3``` with a number that respect this condition : `0x1337d00d-0x15 >= n >= 0x1337d00d` should generate the string `Congratulations!`.
+
+## Solution
+
+```python
+s = "Q}|u`sfg~sf{}|a3"
+candidates = range(0x1337d00d-0x15, 0x1337d00d + 1)
+for c in candidates:
+    x = 0x1337d00d - c
+    res = ""
+    for i in s:
+        res += chr(ord(i) ^ x)
+    if res == "Congratulations!":
+        print(res, c)
+        break
+# Congratulations! 322424827
+```
+
+So our password is `322424827`.
+
+```sh
+$ ./level03
+***********************************
+*               level03         **
+***********************************
+Password:322424827
+$ id
+uid=1003(level03) gid=1003(level03) euid=1004(level04) egid=100(users) groups=1004(level04),100(users),1003(level03)
+```

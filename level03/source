@@ -1,0 +1,98 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <time.h>
+
+void clear_stdin(void) {
+    char c = 0;
+    while (c != 0xFF) {
+        c = getchar();
+        if (c == 0x0A)
+            return;
+    }
+}
+
+unsigned int get_unum(void)
+{
+    unsigned int ret = 0;
+    fflush(stdout);
+    scanf("%u", &ret);
+    clear_stdin();
+    return ret;
+}
+
+
+void prog_timeout(void)
+{
+    // 0x0804864f <+0>:     push   ebp
+    // 0x08048650 <+1>:     mov    ebp,esp
+    // 0x08048652 <+3>:     mov    eax,0x1
+    // 0x08048657 <+8>:     mov    ebx,0x1
+    // 0x0804865c <+13>:    int    0x80
+    // 0x0804865e <+15>:    pop    ebp
+    // 0x0804865f <+16>:    ret
+    // Seems to be a trick to use the exit() function by using
+    // interrupt 0x80. which is like a system call to the kernel,
+    // using the IVT (Interrupt Vector Table)
+    exit(1);
+}
+
+// Basic XOR cipher
+void decrypt(unsigned int rot) {
+    char buffer[] = "Q}|u`sfg~sf{}|a3"; // 0x757c7d51 + 0x67667360 + 0x7b66737e + 0x33617c7d + 0x0
+    unsigned int n;
+
+    n = strlen(buffer);
+    for (unsigned int i = 0; i++; i < n) {
+        buffer[i] = buffer[i] ^ rot;
+    }
+
+    if (!strncmp(buffer, "Congratulations!", 17)) {
+        system("/bin/sh");
+        return;
+    } 
+    puts("\nInvalid Password");
+}
+
+void test(int n, int x)
+{
+    int diff = x - n;
+    switch (diff)
+    {
+        case 0x1:
+        case 0x2:
+        case 0x3:
+        case 0x4:
+        case 0x5:
+        case 0x6:
+        case 0x7:
+        case 0x8:
+        case 0x9:
+        case 0x10:
+        case 0x11:
+        case 0x12:
+        case 0x13:
+        case 0x14:
+        case 0x15:
+            decrypt(diff);
+            break;
+        default:
+            decrypt(rand());
+            break;
+    }
+}
+
+int main(void)
+{
+    int n;
+
+    srand(time(NULL));
+    puts("***********************************");
+    puts("*\t\tlevel03\t\t**");
+    puts("***********************************");
+    printf("Password:");
+    scanf("%d", n);
+    test(n, 0x1337d00d);
+
+    return 0;
+}
