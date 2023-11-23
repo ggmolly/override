@@ -1,0 +1,19 @@
+#include <stdio.h>
+
+int main(int argc)
+{
+    char buffer[0x64];
+    fgets(&buffer, 0x64, stdin);
+    while (1)
+    {
+        int i = 0;
+        while (buffer[i] != 0) {
+            if (buffer[i] > 0x40 && buffer[i] <= 0x5a) {
+                buffer[i] = (buffer[i] ^ 0x20); // lowercase
+            }
+            i++;
+        }
+    }
+    printf(&buffer);
+    exit(0);
+}
