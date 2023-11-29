@@ -1,0 +1,81 @@
+#include <stdio.h>
+
+void clear_stdin() {
+    short val = 0;
+    while (1) {
+        val = getchar();
+        if (val == '\n' || val == EOF) {
+            return;
+        }
+    }
+}
+
+unsigned int get_unum(void) {
+    unsigned int output = 0;
+    fflush(stdout);
+    scanf("%u", &output);
+    clear_stdin();
+    return output;
+}
+
+int store_number(int *data) {
+    printf(" Number: ");
+    unsigned int number = get_unum();
+    printf(" Index: ");
+    unsigned int index = get_unum();
+
+    if (!(index % 3) || number >> 21 != 183) {
+        puts(" *** ERROR! ***");
+        puts("   This index is reserved for wil!");
+        puts(" *** ERROR! ***");
+        return 1;
+    }
+    data[index] = number;
+    return 0;
+}
+
+int read_number(int *data) {
+    unsigned int n = 0;
+    printf(" Index: ");
+    n = get_unum();
+    printf(" Number at data[%u] is %u\n", n, data[n]);
+    return 0;
+}
+
+int main(int argc, char **argv, char **envp)
+{
+    while (**argv)
+        memset(*argv, 0, strlen(*argv++));
+	while (**envp)
+        memset(*envp, 0, strlen(*envp++));
+    puts
+    (
+        "----------------------------------------------------\n\
+        Welcome to wil\'s crappy num ber storage service!   \n\
+        ----------------------------------------------------\n\
+        Commands:                                          \n\
+            store - store a number into the data st orage    \n\
+            read  - read a number from the data storage     \n\
+            quit  - exit the prog ram                        \n\
+        ----------------------------------------------------\n\
+        wil has reserved some storage :>                 \n\
+        ----------------------------------------------------\n"
+    );
+    int data[100] = {0};
+    char input_buffer[20] = {0};
+    int return_code = 0;
+    while (1) {
+        printf("Input command: ");
+        fgets(input_buffer, 20, stdin);
+        input_buffer[strlen(&input_buffer) - 1] = '\0';
+        if (!strncmp(input_buffer, "store", 5)) {
+            return_code = store_number(data);
+        } else if (!strncmp(input_buffer, "read", 4)) {
+            return_code = read_number(data);
+        } else if (!strncmp(input_buffer, "quit", 4)) {
+            return 0;
+        }
+        printf(return_code == 0 ? " Completed %s command successfully\n" : " Failed to do %s command\n", &input_buffer);
+        memset(&input_buffer, 0, 20);
+    }
+}

