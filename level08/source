@@ -1,0 +1,49 @@
+#include <stdio.h>
+#include <string.h>
+
+void log_wrapper(FILE *file, char *str, char *name) {
+    char buffer[255];
+    strcpy(buffer, str);
+    snprintf(buffer + strlen(buffer), 254 - strlen(buffer), name);
+    buffer[strcspn(buffer, "\n")] = 0;
+    fprintf(file, "LOG: %s\n", buffer);
+}
+
+int main(int argc, char** argv)
+{
+    char buffer[100];
+    if (argc != 2)
+    {
+        printf("Usage: %s filename\n", argv[0]);
+    }
+    FILE* log_file = fopen("./backups/.log", "w");
+    if (log_file == 0)
+    {
+        printf("ERROR: Failed to open %s\n", "./backups/.log");
+        exit(1);
+    }
+    log_wrapper(log_file, "Starting back up: ", argv[1]);
+    FILE* fp = fopen(argv[1], "r");
+    if (fp == 0)
+    {
+        printf("ERROR: Failed to open %s\n", argv[1]);
+        exit(1);
+    }
+    strncpy(buffer, "./backups/", 11);
+    strncat(buffer, argv[1], (99 - ((!strlen(buffer)) - 1)));
+    int fd = open(buffer, 0xc1, 0x1b0);
+    if (fd < 0)
+    {
+        printf("ERROR: Failed to open %s%s\n", "./backups/", argv[1]);
+        exit(1);
+    }
+    char c = 0;
+    while (c != 255)
+    {
+        write(fd, &c, 1);
+        c = fgetc(fp);
+    }
+    log_wrapper(log_file, "Finished back up ", argv[1]);
+    fclose(fp);
+    close(fd);
+}

