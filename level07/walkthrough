@@ -39,6 +39,8 @@ Input command: store
  Failed to do store command
 ```
 
+## Analysis
+
 There's no buffer overflow, however we can read/write 4 bytes of memory anywhere we want, except in this case :
 
 ```c
